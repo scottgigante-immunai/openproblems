@@ -159,9 +159,7 @@ jobs:
         sudo chown $USER /mnt/openproblems-nextflow
         s3fs -o umask=0277,uid=$(id -u) openproblems-nextflow /mnt/openproblems-nextflow
         # Create bucket/ work/ and cwd/
-        for dir in bucket work cwd; do
-          mkdir -p /mnt/openproblems-nextflow/${dir}/${BRANCH}
-        done
+        mkdir -p /mnt/openproblems-nextflow/{bucket,word,cwd}/${BRANCH}
         ls -l /mnt/openproblems-nextflow/*/${BRANCH}
 
     - name: Install package & dependencies
@@ -199,6 +197,7 @@ jobs:
           docker tag singlecellopenproblems/${image} ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image}
           docker push --quiet ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image}
         done
+        docker rmi -f $(docker images -q -a)
 
     - name: Run benchmark
       env:
