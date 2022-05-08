@@ -197,7 +197,7 @@ jobs:
           docker tag singlecellopenproblems/${image} ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image}
           docker push --quiet ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image}
         done
-        docker rmi -q -f $(docker images -q -a)
+        docker rmi -q -f $(docker images -q -a) || true
 
     - name: Run benchmark
       env:
