@@ -197,7 +197,7 @@ jobs:
           docker tag singlecellopenproblems/${image} ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image}
           docker push --quiet ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image}
         done
-        docker rmi -f $(docker images -q -a)
+        docker rmi -q -f $(docker images -q -a)
 
     - name: Run benchmark
       env:
@@ -218,8 +218,7 @@ jobs:
         -name "${RUN_NAME}" \
         -e.PYTHONPATH="${PYTHONPATH}" \
         openproblems-bio/nf-openproblems \
-        --branch ${BRANCH} 2>&1 | \
-        grep -v "^WARN: Unable to retrieve AWS batch instance type.*Invalid identifier"
+        --branch ${BRANCH}
       shell: /usr/bin/bash -eou pipefail {0}
 
     - name: Copy results
