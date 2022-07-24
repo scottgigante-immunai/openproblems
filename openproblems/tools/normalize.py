@@ -1,15 +1,24 @@
 from . import decorators
 
 import anndata as ad
+import logging
 import scanpy as sc
 import scprep
-import warnings
+
+log = logging.getLogger("openproblems")
 
 _scran = scprep.run.RFunction(
-    setup="library('scran')",
+    setup="""
+        library('scran')
+        library('BiocParallel')
+        """,
     args="sce, min.mean=0.1",
     body="""
-    sce <- computeSumFactors(sce, min.mean=min.mean, assay.type="X")
+    sce <- computeSumFactors(
+           sce, min.mean=min.mean,
+           assay.type="X",
+           BPPARAM=SerialParam()
+           )
     sizeFactors(sce)
     """,
 )
@@ -66,7 +75,7 @@ def log_cpm_hvg(adata: ad.AnnData, n_genes: int = 1000) -> ad.AnnData:
     adata = log_cpm(adata)
 
     if adata.n_vars < n_genes:
-        warnings.warn(
+        log.warning(
             f"Less than {n_genes} genes, setting 'n_genes' to {int(adata.n_vars * 0.5)}"
         )
         n_genes = int(adata.n_vars * 0.5)

@@ -4,7 +4,12 @@ from ....tools.decorators import dataset
 import numpy as np
 
 
-@dataset("Zebrafish (by labels)")
+@dataset(
+    "Zebrafish (by labels)",
+    data_url=load_zebrafish.metadata["data_url"],
+    data_reference=load_zebrafish.metadata["data_reference"],
+    dataset_summary="TODO",
+)
 def zebrafish_labels(test=False):
     adata = load_zebrafish(test=test)
     adata.obs["labels"] = adata.obs["cell_type"]
@@ -13,7 +18,12 @@ def zebrafish_labels(test=False):
     return adata
 
 
-@dataset("Zebrafish (random split)")
+@dataset(
+    "Zebrafish (random split)",
+    data_url=load_zebrafish.metadata["data_url"],
+    data_reference=load_zebrafish.metadata["data_reference"],
+    dataset_summary="TODO",
+)
 def zebrafish_random(test=False):
     adata = load_zebrafish(test=test)
     adata.obs["labels"] = adata.obs["cell_type"]

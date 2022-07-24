@@ -4,9 +4,22 @@ from ....tools.utils import check_version
 from anndata import AnnData
 from typing import Optional
 
+import functools
 import logging
 
 log = logging.getLogger("openproblems")
+
+
+_neuralee_method = functools.partial(
+    method,
+    paper_name="NeuralEE: A GPU-Accelerated Elastic Embedding "
+    "Dimensionality Reduction Method for "
+    "Visualizing Large-Scale scRNA-Seq Data",
+    paper_url="https://www.frontiersin.org/articles/10.3389/fgene.2020.00786/full",
+    paper_year=2020,
+    code_url="https://github.com/HiBearME/NeuralEE",
+    image="openproblems-python-extras",
+)
 
 
 def _create_neuralee_dataset(
@@ -34,34 +47,27 @@ def _create_neuralee_dataset(
     return dataset
 
 
-@method(
-    method_name="NeuralEE (CPU) (Default)",
-    paper_name=" NeuralEE: A GPU-Accelerated Elastic Embedding "
-    "Dimensionality Reduction Method for "
-    "Visualizing Large-Scale scRNA-Seq Data ",
-    paper_url="https://www.frontiersin.org/articles/10.3389/fgene.2020.00786/full",
-    paper_year=2020,
-    code_url="https://github.com/HiBearME/NeuralEE",
-    code_version=check_version("neuralee"),
-    image="openproblems-python-extras",
-)
-def neuralee_default(adata: AnnData, test: bool = False) -> AnnData:
+def _neuralee(
+    adata,
+    d: int = 2,
+    test: bool = False,
+    subsample_genes: Optional[int] = None,
+    normalize: bool = True,
+):
     from neuralee.embedding import NeuralEE
 
     import torch
 
-    # Store raw counts for use by metrics
-    adata.layers["counts"] = adata.X.copy()
-
     # this can fail due to sparseness of data; if so, retry with more genes
     # note that this is a deviation from the true default behavior, which fails
     # see https://github.com/openproblems-bio/openproblems/issues/375
-    subsample_genes = 500
     while True:
         try:
-            dataset = _create_neuralee_dataset(adata, subsample_genes=subsample_genes)
+            dataset = _create_neuralee_dataset(
+                adata, normalize=normalize, subsample_genes=subsample_genes
+            )
         except ValueError:
-            if subsample_genes < adata.n_vars:
+            if subsample_genes is not None and subsample_genes < adata.n_vars:
                 subsample_genes = min(adata.n_vars, int(subsample_genes * 1.2))
                 log.warning(
                     "ValueError in neuralee_default. "
@@ -72,37 +78,23 @@ def neuralee_default(adata: AnnData, test: bool = False) -> AnnData:
         else:
             break
 
-    NEE = NeuralEE(dataset, d=2, device=torch.device("cpu"))
-    res = NEE.fine_tune(verbose=False)
+    NEE = NeuralEE(dataset, d=d, device=torch.device("cpu"))
+    fine_tune_kwargs = dict(verbose=False)
+    if test:
+        fine_tune_kwargs["maxit"] = 10
+    res = NEE.fine_tune(**fine_tune_kwargs)
 
     adata.obsm["X_emb"] = res["X"].detach().cpu().numpy()
-
+    adata.uns["method_code_version"] = check_version("neuralee")
     return adata
 
 
-@method(
-    method_name="NeuralEE (CPU) (logCPM, 1kHVG)",
-    paper_name=" NeuralEE: A GPU-Accelerated Elastic Embedding "
-    "Dimensionality Reduction Method for "
-    "Visualizing Large-Scale scRNA-Seq Data ",
-    paper_url="https://pubmed.ncbi.nlm.nih.gov/33193561/",
-    paper_year=2020,
-    code_url="https://github.com/HiBearME/NeuralEE",
-    code_version=check_version("neuralee"),
-    image="openproblems-python-extras",
-)
+@_neuralee_method(method_name="NeuralEE (CPU) (Default)")
+def neuralee_default(adata: AnnData, test: bool = False) -> AnnData:
+    return _neuralee(adata, test=test, normalize=True, subsample_genes=500)
+
+
+@_neuralee_method(method_name="NeuralEE (CPU) (logCPM, 1kHVG)")
 def neuralee_logCPM_1kHVG(adata: AnnData, test: bool = False) -> AnnData:
-    from neuralee.embedding import NeuralEE
-
-    import torch
-
     adata = log_cpm_hvg(adata)
-
-    dataset = _create_neuralee_dataset(adata, normalize=False, subsample_genes=None)
-
-    NEE = NeuralEE(dataset, d=2, device=torch.device("cpu"))
-    res = NEE.fine_tune(verbose=False)
-
-    adata.obsm["X_emb"] = res["X"].detach().cpu().numpy()
-
-    return adata
+    return _neuralee(adata, test=test, normalize=False, subsample_genes=None)

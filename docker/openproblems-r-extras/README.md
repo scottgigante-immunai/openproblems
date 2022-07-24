@@ -1,4 +1,4 @@
-# openproblems-r-base Docker image
+# openproblems-r-extras Docker image
 
 Base image: singlecellopenproblems/openproblems-r-base
 
@@ -13,7 +13,10 @@ R packages:
 * batchelor
 * sparsesvd
 * dplyr
+* spacexr
+* Seurat
 
 Python packages:
 
 * harmonic-alignment
+* xgboost
