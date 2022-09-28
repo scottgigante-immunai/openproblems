@@ -339,9 +339,15 @@ jobs:
         s3fs -o umask=0277,uid=$(id -u) openproblems-nextflow /mnt/openproblems-nextflow
         # Create bucket/ work/ and cwd/
         for dir in bucket work cwd; do
-          mkdir -p /mnt/openproblems-nextflow/${dir}/${BRANCH}
+          if [ ! -d /mnt/openproblems-nextflow/${dir}/${BRANCH} ]; then
+            # no cache exists
+            mkdir -p /mnt/openproblems-nextflow/${dir}/${BRANCH}
+            if [ -d /mnt/openproblems-nextflow/${dir}/main ]; then
+              # use cache from main
+              cp -r /mnt/openproblems-nextflow/${dir}/main/* /mnt/openproblems-nextflow/${dir}/${BRANCH}/
+            fi
+          fi
         done
-        ls -l /mnt/openproblems-nextflow/*/${BRANCH}
 
     - name: Install package & dependencies
       run: |
