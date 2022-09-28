@@ -344,7 +344,7 @@ jobs:
             mkdir -p /mnt/openproblems-nextflow/${dir}/${BRANCH}
             if [ -d /mnt/openproblems-nextflow/${dir}/main ]; then
               # use cache from main
-              aws s3 cp -r s3://openproblems-nextflow/${dir}/main/* s3://openproblems-nextflow/${dir}/${BRANCH}/
+              aws s3 cp --recursive s3://openproblems-nextflow/${dir}/main/ s3://openproblems-nextflow/${dir}/${BRANCH}/
             fi
           fi
         done
