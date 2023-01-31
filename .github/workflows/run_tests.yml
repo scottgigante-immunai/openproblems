@@ -21,8 +21,12 @@ jobs:
       !endsWith(github.event.head_commit.message, '# ci skip') &&
       !startsWith(github.ref, 'refs/heads/test_process') &&
       (
-        github.event_name == 'push' ||
-        startsWith(github.ref, 'refs/heads/test_docker')
+        github.event_name != 'pull_request' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.draft == false &&
+          github.event.pull_request.head.repo.owner.id == github.event.pull_request.base.repo.owner.id
+        )
       )
 
     env:
@@ -47,6 +51,9 @@ jobs:
     - name: Set up environment
       run: |
         echo "LINUX_VERSION=$(uname -rs)" >> $GITHUB_ENV
+        echo "REPO_OWNER_LOWER=${OWNER,,}" >> ${GITHUB_ENV}
+      env:
+        OWNER: '${{ github.repository_owner }}'
 
     - name: Cache Python packages
       uses: actions/cache@v3
@@ -109,7 +116,7 @@ jobs:
       uses: docker/login-action@v2
       with:
         registry: ghcr.io
-        username: ${{ github.repository_owner }}
+        username: ${{ env.REPO_OWNER_LOWER }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Export docker images
@@ -117,13 +124,18 @@ jobs:
       run: |
         IMAGES="$(find ./docker -mindepth 1 -type d -exec basename {} \;)"
         for image in ${IMAGES}; do
-          GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${image}:${{ github.run_id }}"
+          GHCR_IMAGE="ghcr.io/${REPO_OWNER_LOWER}/${image}:${{ github.run_id }}"
           docker tag singlecellopenproblems/$image $GHCR_IMAGE
           docker push $GHCR_IMAGE &
+          PIDS+=("${!}")
         done
-        wait
+        for pid in "${PIDS[@]}"; do
+          # ensure exited with status 0
+          wait $pid
+        done
         # convert to JSON
         echo "images=[\"$(paste -s -d ' ' <(echo $IMAGES) | sed 's/  */\",\"/g')\"]" >> $GITHUB_OUTPUT
+      shell: bash -e {0}
 
   create_matrix:
     runs-on: ubuntu-latest
@@ -135,9 +147,9 @@ jobs:
       !startsWith(github.ref, 'refs/heads/test_process') &&
       !startsWith(github.ref, 'refs/heads/test_website') &&
       (
-        startsWith(github.ref, 'refs/heads') ||
-        startsWith(github.ref, 'refs/tags') ||
+        github.event_name != 'pull_request' ||
         (
+          github.event_name == 'pull_request' &&
           github.event.pull_request.draft == false &&
           github.actor != 'dependabot[bot]'
         )
@@ -227,29 +239,45 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Log in to the Container registry
-      uses: docker/login-action@v2
-      if: "github.event_name == 'push'"
-      with:
-        registry: ghcr.io
-        username: ${{ github.repository_owner }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Download docker images
-      if: "github.event_name == 'push'"
-      run: |
-        for image in $(find ./docker -mindepth 1 -type d -exec basename {} \;); do
-          GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${image}:${{ github.run_id }}"
-          (docker pull $GHCR_IMAGE && docker tag $GHCR_IMAGE singlecellopenproblems/$image:latest) &
-        done
-        wait
-
     - name: Set up environment
       run: |
         echo "LINUX_VERSION=$(uname -rs)" >> $GITHUB_ENV
         echo "pythonLocation=$(which python)" >> $GITHUB_ENV
         echo "PYTHON_VERSION=$(python --version)" >> $GITHUB_ENV
         echo "R_VERSION=$(R --version | head -n 1)" >> $GITHUB_ENV
+        echo "REPO_OWNER_LOWER=${OWNER,,}" >> ${GITHUB_ENV}
+      env:
+        OWNER: '${{ github.repository_owner }}'
+      shell: bash -e {0}
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@v2
+      if: "needs.build_images.result == 'success'"
+      with:
+        registry: ghcr.io
+        username: ${{ env.REPO_OWNER_LOWER }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Download docker images
+      if: "needs.build_images.result == 'success'"
+      env:
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        for image in $(find ./docker -mindepth 1 -type d -exec basename {} \;); do
+          GHCR_IMAGE="ghcr.io/${REPO_OWNER_LOWER}/${image}:${RUN_ID}"
+          docker pull $GHCR_IMAGE &
+          PIDS+=("${!}")
+        done
+        for pid in "${PIDS[@]}"; do
+          # ensure exited with status 0
+          wait $pid
+        done
+        # tag images
+        for image in $(find ./docker -mindepth 1 -type d -exec basename {} \;); do
+          GHCR_IMAGE="ghcr.io/${REPO_OWNER_LOWER}/${image}:${RUN_ID}"
+          docker tag $GHCR_IMAGE singlecellopenproblems/${image}:latest
+        done
+      shell: bash -e {0}
 
     - name: Cache Python packages
       uses: actions/cache@v3
@@ -275,6 +303,8 @@ jobs:
           ${{ env.LINUX_VERSION }}-renv-${{ env.R_VERSION }}-
 
     - name: Install R packages
+      env:
+        BIOCVERSION: '3.16'
       run: |
         if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv")
         renv::restore()
@@ -283,8 +313,8 @@ jobs:
         install_renv("docker/openproblems-github-actions/r_requirements.txt")
       shell: Rscript {0}
 
-    - name: Update Docker docker images
-      if: "github.event_name == 'pull_request'"
+    - name: Update Docker images
+      if: "needs.build_images.result == 'skipped'"
       run: |
         cd workflow
         snakemake -j $(nproc) docker
@@ -344,7 +374,7 @@ jobs:
       always() &&
       !endsWith(github.event.head_commit.message, '# ci skip') &&
       needs.build_images.result == 'success' &&
-      github.event_name == 'push' &&
+      github.event_name != 'pull_request' &&
       (
         needs.run_tester.result == 'success' ||
         needs.run_tester.result == 'skipped'
@@ -395,21 +425,6 @@ jobs:
     - name: Clear space on runner
       run: ./scripts/clear_runner_diskspace.sh
 
-    - name: Log in to the Container registry
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{ github.repository_owner }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Download docker images
-      run: |
-        for image in $(find ./docker -mindepth 1 -type d -exec basename {} \;); do
-          GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${image}:${{ github.run_id }}"
-          (docker pull $GHCR_IMAGE && docker tag $GHCR_IMAGE singlecellopenproblems/$image:latest) &
-        done
-        wait
-
     - name: Set up environment
       id: setup-environment
       run: |
@@ -429,6 +444,36 @@ jobs:
         echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
         RUN_NAME="$(echo "$BRANCH" | sed "s/[^a-zA-Z0-9]/_/g")_$(git rev-parse --short HEAD)_${GITHUB_RUN_ATTEMPT}"
         echo "run_name=${RUN_NAME}" >> $GITHUB_OUTPUT
+        echo "REPO_OWNER_LOWER=${OWNER,,}" >> ${GITHUB_ENV}
+      env:
+        OWNER: '${{ github.repository_owner }}'
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ env.REPO_OWNER_LOWER }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Download docker images
+      env:
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        for image in $(find ./docker -mindepth 1 -type d -exec basename {} \;); do
+          GHCR_IMAGE="ghcr.io/${REPO_OWNER_LOWER}/${image}:${RUN_ID}"
+          docker pull $GHCR_IMAGE &
+          PIDS+=("${!}")
+        done
+        for pid in "${PIDS[@]}"; do
+          # ensure exited with status 0
+          wait $pid
+        done
+        # tag images
+        for image in $(find ./docker -mindepth 1 -type d -exec basename {} \;); do
+          GHCR_IMAGE="ghcr.io/${REPO_OWNER_LOWER}/${image}:${RUN_ID}"
+          docker tag $GHCR_IMAGE singlecellopenproblems/${image}:latest
+        done
+      shell: bash -e {0}
 
     - name: Upload Docker images
       env:
@@ -442,8 +487,13 @@ jobs:
         for image in $(cd docker && ls -1d */ | tr -d '/'); do
           docker tag singlecellopenproblems/${image} ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image}
           docker push --quiet ${ECR_ENDPOINT}/openproblems:${BRANCH}-${image} &
+          PIDS+=("${!}")
         done
-        wait
+        for pid in "${PIDS[@]}"; do
+          # ensure exited with status 0
+          wait $pid
+        done
+      shell: bash -e {0}
 
   run_benchmark:
     needs:

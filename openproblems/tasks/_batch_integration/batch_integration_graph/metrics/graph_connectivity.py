@@ -21,8 +21,9 @@ on the kNN graph, it can be used to evaluate all integration outputs.
 
 @metric(
     metric_name="Graph connectivity",
+    paper_reference="luecken2022benchmarking",
     maximize=True,
-    image="openproblems-python-batch-integration",  # only if required
+    image="openproblems-r-pytorch",
 )
 def graph_connectivity(adata):
     import scib.metrics

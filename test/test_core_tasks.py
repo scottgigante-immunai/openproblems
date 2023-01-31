@@ -29,7 +29,7 @@ class TestTask(unittest.TestCase):
         assert len(self.task._task_summary) < TASK_SUMMARY_MAXLEN
         assert hasattr(self.task, "DEFAULT_LAYER")
         assert isinstance(self.task.DEFAULT_LAYER, str)
-        assert self.task.DEFAULT_LAYER in ["counts", "log_normalized"]
+        assert self.task.DEFAULT_LAYER in ["counts", "log_normalized", "log_cpm"]
         assert hasattr(self.task, "api")
         assert isinstance(self.task.api, MODULE)
         for list_name in ["DATASETS", "METHODS", "METRICS"]:
@@ -40,7 +40,7 @@ class TestTask(unittest.TestCase):
             for method in method_list:
                 assert callable(method)
 
-    def test_task_api_members(self):
+    def test_api_members(self):
         """Test that task.api has the required members"""
         assert hasattr(self.task.api, "check_dataset")
         assert hasattr(self.task.api, "check_method")
@@ -52,7 +52,7 @@ class TestTask(unittest.TestCase):
         assert callable(self.task.api.sample_method)
         assert hasattr(self.task.api.sample_dataset, "metadata")
 
-    def test_task_api_is_consistent(self):
+    def test_api_is_consistent(self):
         """Test that a task's API is self-consistent"""
         adata = self.task.api.sample_dataset()
         assert self.task.api.check_dataset(adata)

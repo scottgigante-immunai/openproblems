@@ -17,14 +17,15 @@ def _p_filt(x, y):
 
 
 _r_liana = r_function(
-    "liana.R", args="sce, op_resource, min_expression_prop, idents_col, test, ..."
+    "liana.R",
+    args="sce, op_resource, min_expression_prop, idents_col, test, aggregate_how, ...",
 )
 
 _liana_method = functools.partial(
     method,
     paper_name="Comparison of methods and resources for cell-cell "
     "communication inference from single-cell RNA-Seq data",
-    paper_url="https://www.nature.com/articles/s41467-022-30755-0",
+    paper_reference="dimitrov2022comparison",
     paper_year=2022,
     code_url="https://github.com/saezlab/liana",
     image="openproblems-r-extras",
@@ -36,6 +37,7 @@ def _liana(
     score_col="aggregate_rank",
     min_expression_prop=0.1,
     test=False,
+    aggregate_how=None,
     **kwargs,
 ):
     # log-normalize
@@ -50,6 +52,7 @@ def _liana(
         min_expression_prop=min_expression_prop,
         idents_col="label",
         test=test,
+        aggregate_how=aggregate_how,
         **kwargs,
     )
 
@@ -63,20 +66,40 @@ def _liana(
 
 
 @_liana_method(
-    method_name="LIANA Rank Aggregate (max)",
+    method_name="Specificity Rank Aggregate (max)",
 )
-def liana_max(adata, test=False):
-    adata = _liana(adata, test=test)
+def specificity_max(adata, test=False):
+    adata = _liana(adata, test=test, aggregate_how="specificity")
     adata.uns["ccc_pred"] = aggregate_method_scores(adata, how="max")
 
     return adata
 
 
 @_liana_method(
-    method_name="LIANA Rank Aggregate (sum)",
+    method_name="Specificity Rank Aggregate (sum)",
 )
-def liana_sum(adata, test=False):
-    adata = _liana(adata, test=test)
+def specificity_sum(adata, test=False):
+    adata = _liana(adata, test=test, aggregate_how="specificity")
+    adata.uns["ccc_pred"] = aggregate_method_scores(adata, how="sum")
+
+    return adata
+
+
+@_liana_method(
+    method_name="Magnitude Rank Aggregate (max)",
+)
+def magnitude_max(adata, test=False):
+    adata = _liana(adata, test=test, aggregate_how="magnitude")
+    adata.uns["ccc_pred"] = aggregate_method_scores(adata, how="max")
+
+    return adata
+
+
+@_liana_method(
+    method_name="Magnitude Rank Aggregate (sum)",
+)
+def magnitude_sum(adata, test=False):
+    adata = _liana(adata, test=test, aggregate_how="magnitude")
     adata.uns["ccc_pred"] = aggregate_method_scores(adata, how="sum")
 
     return adata
@@ -86,7 +109,7 @@ _cellphonedb_method = functools.partial(
     method,
     paper_name="CellPhoneDB: inferring cell–cell communication from "
     "combined expression of multi-subunit ligand–receptor complexes",
-    paper_url="https://www.nature.com/articles/s41596-020-0292-x",
+    paper_reference="efremova2020cellphonedb",
     paper_year=2020,
     code_url="https://github.com/saezlab/liana",
     image="openproblems-r-extras",
@@ -133,7 +156,7 @@ _connectome_method = functools.partial(
     method,
     paper_name="Computation and visualization of cell–cell signaling "
     "topologies in single-cell systems data using Connectome",
-    paper_url="https://www.nature.com/articles/s41598-022-07959-x",
+    paper_reference="raredon2022computation",
     paper_year=2022,
     code_url="https://github.com/saezlab/liana",
     image="openproblems-r-extras",
@@ -164,11 +187,22 @@ def connectome_sum(adata, test=False):
     return adata
 
 
+_logfc_method = functools.partial(
+    method,
+    paper_name="Comparison of methods and resources for cell-cell "
+    "communication inference from single-cell RNA-Seq data",
+    paper_reference="dimitrov2022comparison",
+    paper_year=2022,
+    code_url="https://github.com/saezlab/liana",
+    image="openproblems-r-extras",
+)
+
+
 def _logfc(adata, test=False):
     return _liana(adata, method="logfc", score_col="logfc_comb", test=test)
 
 
-@_connectome_method(
+@_logfc_method(
     method_name="Log2FC (max)",
 )
 def logfc_max(adata, test=False):
@@ -178,7 +212,7 @@ def logfc_max(adata, test=False):
     return adata
 
 
-@_connectome_method(
+@_logfc_method(
     method_name="Log2FC (sum)",
 )
 def logfc_sum(adata, test=False):
@@ -191,7 +225,7 @@ def logfc_sum(adata, test=False):
 _natmi_method = functools.partial(
     method,
     paper_name="Predicting cell-to-cell communication networks using NATMI",
-    paper_url="https://www.nature.com/articles/s41467-020-18873-z",
+    paper_reference="hou2020predicting",
     paper_year=2021,
     code_url="https://github.com/saezlab/liana",
     image="openproblems-r-extras",
@@ -226,7 +260,7 @@ _sca_method = functools.partial(
     method,
     paper_name="SingleCellSignalR: inference of intercellular networks "
     "from single-cell transcriptomics",
-    paper_url="https://academic.oup.com/nar/article/48/10/e55/5810485",
+    paper_reference="cabello2020singlecellsignalr",
     paper_year=2021,
     code_url="https://github.com/saezlab/liana",
     image="openproblems-r-extras",
